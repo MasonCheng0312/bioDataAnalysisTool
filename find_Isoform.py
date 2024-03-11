@@ -108,6 +108,42 @@ def create_gene_isoform_table(tsv_path:str, protein_iso:pd.DataFrame, transcript
 def add_LOC_to_geneID(name:str) -> str:
     return "LOC"+name
 
+def fasta_filter(input_path:str, output_path:str, iso_gene_table:pd.DataFrame) -> None:
+    def _checkMode() -> str:
+        if iso_gene_table["Gene Type"].iloc[[0]].item() == "PROTEIN_CODING":
+            return "p"
+        elif iso_gene_table["Gene Type"].iloc[[0]].item() != "PROTEIN_CODING":
+            return "n"
+        
+    def _colName_to_read() -> str:
+        if _checkMode() is "p":
+            colName = "Protein Accession"
+        else:
+            colName = "Transcript Accession"
+        return colName
+    
+    def _transformTableToDict() -> dict:
+        result = {}
+        col = _colName_to_read()
+        for _, row in iso_gene_table.iterrows():
+            result[row["NCBI GeneID"]] = row[col]
+        return result
+    
+    check_table = _transformTableToDict()
+    with open(output_path,"w") as output:
+        input_content = SeqIO.parse(input_path,"fasta")
+        for record in input_content:
+            gene_target = "LOC" + record.description.strip().split("GeneID=")[1].split("]")[0]
+            try:
+                if check_table[gene_target] == record.name:
+                    output.write(">" + record.description + "\n")
+                    output.write(f'{record.seq}'+ "\n")
+                else:
+                    continue
+            except:
+                continue
+    output.close()
+
 if __name__ == "__main__":
     faa_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/protein.faa"
     fna_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/rna.fna"
@@ -131,23 +167,25 @@ if __name__ == "__main__":
 
     # parse dataset
     dataset_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/ncbi_dataset.tsv"
-    dataset_with_isoform = create_gene_isoform_table(tsv_path=dataset_path,
+    dsim_table = create_gene_isoform_table(tsv_path=dataset_path,
                                                      protein_iso=iso_table_for_proteinCoding,
                                                      transcript_iso=iso_table_for_nonCoding)
-    dataset_with_isoform = dataset_with_isoform[["NCBI GeneID","Protein Accession","Transcript Accession","Gene Type"]]
-    dataset_with_isoform["NCBI GeneID"] = dataset_with_isoform["NCBI GeneID"].apply(add_LOC_to_geneID)
-    dataset_with_isoform["Protein Accession"] = dataset_with_isoform["Protein Accession"].fillna("-")
-    dataset_with_isoform["Transcript Accession"] = dataset_with_isoform["Transcript Accession"].fillna("-")
+    dsim_table = dsim_table[["NCBI GeneID","Protein Accession","Transcript Accession","Gene Type"]]
     
-    # check answer
-    # df = pd.read_csv("/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/output/Dsim/Dsim_table.csv")
-    # df = df[["NCBI_GeneID","Protein_Accession","Transcript_Accession"]]
+    # because the geneID col we done doesn't contain "LOC" in front of its num
+    dsim_table["NCBI GeneID"] = dsim_table["NCBI GeneID"].apply(add_LOC_to_geneID)
 
-    # df.rename(columns={"NCBI_GeneID":"NCBI GeneID",
-    #                    "Protein_Accession":"Protein Accession",
-    #                    "Transcript_Accession":"Transcript Accession"},inplace=True)
-    # compare = pd.concat([df, dataset_with_isoform]).drop_duplicates(keep= False)
-    # compare.sort_values(by="NCBI GeneID",inplace=True)
+    dsim_table["Protein Accession"] = dsim_table["Protein Accession"].fillna("-")
+    dsim_table["Transcript Accession"] = dsim_table["Transcript Accession"].fillna("-")
+    
+    # from dsim table renew gene fasta file for blast
+    blastp_path = "/home/cosbi2/py_project/tools/output/Dsim_for_blastp.fa"
+    blastn_path = "/home/cosbi2/py_project/tools/output/Dsim_for_blastn.fa"
+    dsim_protein = dsim_table[dsim_table["Gene Type"] == "PROTEIN_CODING"]
+    dsim_trans = dsim_table[dsim_table["Gene Type"] != "PROTEIN_CODING"]
+    fasta_filter(faa_path,blastp_path,dsim_protein)
+    fasta_filter(fna_path,blastn_path,dsim_trans)
+
 
     
 

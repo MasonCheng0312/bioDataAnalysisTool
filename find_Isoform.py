@@ -76,7 +76,7 @@ def find_isoform_for_nonCoding(transLenTable:pd.DataFrame) -> pd.DataFrame:
     def _filter(group):
         max_value_of_length = group["Transcript_length"].max()
         row_With_maxLength = group[group["Transcript_length"] == max_value_of_length]
-        return row_With_maxLength
+        return row_With_maxLength.iloc[[0]]
     
     trans_candidate_table = _expandTransLengthTable(transLenTable)
     iso_table = trans_candidate_table.groupby("NCBI GeneID").apply(_filter).reset_index(drop=True)
@@ -99,6 +99,7 @@ def create_gene_isoform_table(tsv_path:str, protein_iso:pd.DataFrame, transcript
     protein_part["NCBI GeneID"] = protein_part["NCBI GeneID"].astype('str')
     transcript_part["NCBI GeneID"] = transcript_part["NCBI GeneID"].astype('str')
     protein_result = pd.merge(protein_part,protein_iso,on="NCBI GeneID",how="left")
+
     trans_result = pd.merge(transcript_part,transcript_iso,on="NCBI GeneID",how="left")
 
     gene_isoform = pd.concat([protein_result,trans_result])
@@ -111,11 +112,13 @@ if __name__ == "__main__":
     faa_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/protein.faa"
     fna_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/rna.fna"
     gff_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/genomic.gff"
-
+    
+    # parse input file
     protein_length_table = parse_protein_seq_length(faa_path)
     transcript_length_table = parse_transcript_seq_length(fna_path)
     protein_transcript_pair = parse_protein_transcript_pair(gff_path)
 
+    # find isoform
     isoform_candidate = merge_proLen_transLen_to_pairTable(protein_length_table,transcript_length_table,protein_transcript_pair)
     iso_table_for_proteinCoding = find_isoform_for_proteinCoding(isoform_candidate)
 
@@ -126,20 +129,25 @@ if __name__ == "__main__":
     iso_table.to_csv("/home/cosbi2/py_project/tools/output/iso_result.csv",index=False)
     iso_table_for_proteinCoding.to_csv("/home/cosbi2/py_project/tools/output/iso_result_protein.csv",index=False) 
 
+    # parse dataset
     dataset_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/ncbi_dataset.tsv"
     dataset_with_isoform = create_gene_isoform_table(tsv_path=dataset_path,
                                                      protein_iso=iso_table_for_proteinCoding,
                                                      transcript_iso=iso_table_for_nonCoding)
-    df = pd.read_csv("/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/output/Dsim/Dsim_table.csv")
-    df = df[["NCBI_GeneID","Protein_Accession","Transcript_Accession"]]
-
-    df.rename(columns={"NCBI_GeneID":"NCBI GeneID",
-                       "Protein_Accession":"Protein Accession",
-                       "Transcript_Accession":"Transcript Accession"},inplace=True)
-    dataset_with_isoform = dataset_with_isoform[["NCBI GeneID","Protein Accession","Transcript Accession"]]
+    dataset_with_isoform = dataset_with_isoform[["NCBI GeneID","Protein Accession","Transcript Accession","Gene Type"]]
     dataset_with_isoform["NCBI GeneID"] = dataset_with_isoform["NCBI GeneID"].apply(add_LOC_to_geneID)
     dataset_with_isoform["Protein Accession"] = dataset_with_isoform["Protein Accession"].fillna("-")
     dataset_with_isoform["Transcript Accession"] = dataset_with_isoform["Transcript Accession"].fillna("-")
-    compare = pd.concat([df, dataset_with_isoform]).drop_duplicates(keep= False)
-    compare.sort_values(by="NCBI GeneID",inplace=True)
-    print(compare)
+    
+    # check answer
+    # df = pd.read_csv("/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/output/Dsim/Dsim_table.csv")
+    # df = df[["NCBI_GeneID","Protein_Accession","Transcript_Accession"]]
+
+    # df.rename(columns={"NCBI_GeneID":"NCBI GeneID",
+    #                    "Protein_Accession":"Protein Accession",
+    #                    "Transcript_Accession":"Transcript Accession"},inplace=True)
+    # compare = pd.concat([df, dataset_with_isoform]).drop_duplicates(keep= False)
+    # compare.sort_values(by="NCBI GeneID",inplace=True)
+
+    
+

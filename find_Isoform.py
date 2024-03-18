@@ -76,6 +76,10 @@ def find_isoform_for_nonCoding(transLenTable:pd.DataFrame) -> pd.DataFrame:
     def _filter(group):
         max_value_of_length = group["Transcript_length"].max()
         row_With_maxLength = group[group["Transcript_length"] == max_value_of_length]
+        row_With_maxLength["name"] = row_With_maxLength["Transcript Accession"].str.extract(r'(\d+\.\d+|\d+)')
+        row_With_maxLength["name"] = row_With_maxLength["name"].astype(float)
+        row_With_maxLength.sort_values(by="name",inplace=True)
+        row_With_maxLength.drop(columns="name",inplace=True)
         return row_With_maxLength.iloc[[0]]
     
     trans_candidate_table = _expandTransLengthTable(transLenTable)
@@ -116,7 +120,7 @@ def fasta_filter(input_path:str, output_path:str, iso_gene_table:pd.DataFrame) -
             return "n"
         
     def _colName_to_read() -> str:
-        if _checkMode() is "p":
+        if _checkMode() == "p":
             colName = "Protein Accession"
         else:
             colName = "Transcript Accession"
@@ -145,28 +149,32 @@ def fasta_filter(input_path:str, output_path:str, iso_gene_table:pd.DataFrame) -
     output.close()
 
 if __name__ == "__main__":
-    faa_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/protein.faa"
-    fna_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/rna.fna"
-    gff_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/genomic.gff"
+    faa_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW3 files/data/Dmel/protein.faa"
+    fna_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW3 files/data/Dmel/rna.fna"
+    gff_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW3 files/data/Dmel/genomic.gff"
     
     # parse input file
     protein_length_table = parse_protein_seq_length(faa_path)
+    protein_length_table.to_csv("/home/cosbi2/py_project/tools/output/protein_length_dmel.csv",index=False)
     transcript_length_table = parse_transcript_seq_length(fna_path)
+    # print(transcript_length_table[transcript_length_table["NCBI GeneID"]==30972])
+    transcript_length_table.to_csv("/home/cosbi2/py_project/tools/output/trans_length_dmel.csv",index=False)
     protein_transcript_pair = parse_protein_transcript_pair(gff_path)
+    protein_transcript_pair.to_csv("/home/cosbi2/py_project/tools/output/pair_dmel.csv",index=False)
 
     # find isoform
     isoform_candidate = merge_proLen_transLen_to_pairTable(protein_length_table,transcript_length_table,protein_transcript_pair)
     iso_table_for_proteinCoding = find_isoform_for_proteinCoding(isoform_candidate)
 
     iso_table_for_nonCoding = find_isoform_for_nonCoding(transcript_length_table)
-    iso_table_for_nonCoding.to_csv("/home/cosbi2/py_project/tools/output/iso_result_nonCoding.csv",index=False)
+    iso_table_for_nonCoding.to_csv("/home/cosbi2/py_project/tools/output/iso_result_nonCoding_dmel.csv",index=False)
 
     iso_table = pd.concat([iso_table_for_nonCoding,iso_table_for_proteinCoding])
-    iso_table.to_csv("/home/cosbi2/py_project/tools/output/iso_result.csv",index=False)
-    iso_table_for_proteinCoding.to_csv("/home/cosbi2/py_project/tools/output/iso_result_protein.csv",index=False) 
+    iso_table.to_csv("/home/cosbi2/py_project/tools/output/iso_result_dmel.csv",index=False)
+    iso_table_for_proteinCoding.to_csv("/home/cosbi2/py_project/tools/output/iso_result_protein_dmel.csv",index=False) 
 
     # parse dataset
-    dataset_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW2 files/Dsim/ncbi_dataset.tsv"
+    dataset_path = "/home/cosbi2/py_project/112_2_bioClassHW/HW3 files/data/Dmel/ncbi_dataset.tsv"
     dsim_table = create_gene_isoform_table(tsv_path=dataset_path,
                                                      protein_iso=iso_table_for_proteinCoding,
                                                      transcript_iso=iso_table_for_nonCoding)
@@ -179,8 +187,8 @@ if __name__ == "__main__":
     dsim_table["Transcript Accession"] = dsim_table["Transcript Accession"].fillna("-")
     
     # from dsim table renew gene fasta file for blast
-    blastp_path = "/home/cosbi2/py_project/tools/output/Dsim_for_blastp.fa"
-    blastn_path = "/home/cosbi2/py_project/tools/output/Dsim_for_blastn.fa"
+    blastp_path = "/home/cosbi2/py_project/tools/output/Dmel_for_blastp.fa"
+    blastn_path = "/home/cosbi2/py_project/tools/output/Dmel_for_blastn.fa"
     dsim_protein = dsim_table[dsim_table["Gene Type"] == "PROTEIN_CODING"]
     dsim_trans = dsim_table[dsim_table["Gene Type"] != "PROTEIN_CODING"]
     fasta_filter(faa_path,blastp_path,dsim_protein)

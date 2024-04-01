@@ -23,7 +23,7 @@ class blastParser():
         self.colName2 = self.colName2[:6]
 
     def bestMatchFilter(self, e_value) -> tuple[pd.DataFrame,pd.DataFrame]:
-        def _bestHitChooser(data,minor) -> list:  # for each group data, choose the best hit one(or more).
+        def _bestHitChooser(data, _) -> list:  # for each group data, choose the best hit one(or more).
             row_of_minE_Value = data[data["E value"] == data["E value"].min()]
             if len(row_of_minE_Value) == 1:
                 return row_of_minE_Value.values.tolist()
@@ -49,7 +49,7 @@ class blastParser():
                             # return result.values.tolist()
                             return row_of_maxIdentity.values.tolist()
 
-        def _process_data(df, species1:str, species2:str) -> None:
+        def _process_data(df, species1:str, species2:str) -> pd.DataFrame:
             # 將'E value'轉換為可排序的數值型態
             df['E value'] = pd.to_numeric(df['E value'])
 
@@ -67,8 +67,22 @@ class blastParser():
                 
                 # 選擇前n名
                 return group_sorted.head(self.condition)
+            
+            def _split_joined_column(result, joined_column):
+                # 將被 join 的欄位的值拆分成多個行
+                expanded_rows = result.assign(**{joined_column: result[joined_column].str.split(',')})
+                expanded_rows = expanded_rows.explode(joined_column)
+                return expanded_rows
+            
             result = df.groupby(species1).apply(_sort_and_select).reset_index(drop=True)
-            result.to_csv(f"/home/cosbi2/py_project/tools/output/blast{self.type}_{species1}2{species2}_top{str(self.condition)}_result.csv",index=False)
+            check_table = {}
+            for row in result.values:
+                check_table[row[0]] = row[-1].split(",")
+            print(check_table)
+            # print(result)
+            split_result = _split_joined_column(result,species2)
+            return split_result
+            # result.to_csv(f"/home/cosbi2/py_project/tools/output/blast{self.type}_{species1}2{species2}_top{str(self.condition)}_result.csv",index=False)
         
         # first, we drop the last 2 col of csv.
         col_to_delete = ["UK1", "UK2"]
@@ -86,8 +100,15 @@ class blastParser():
         result2 = []
 
         if self.condition != 1:
-            _process_data(self.file1, species1=self.main, species2=self.minor)
-            _process_data(self.file2, species1=self.minor, species2=self.main)
+            # _process_data(self.file1, species1=self.main, species2=self.minor)
+            # this part can do just when user need reverse answer
+            reverse_data = _process_data(self.file2, species1=self.minor, species2=self.main)
+        else:
+            for _, group_data in group2:
+                record = _bestHitChooser(group_data,self.main)
+                for element in record:
+                    result2.append(element[0:6])
+            reverse_data = pd.DataFrame(result2,columns=self.colName2)
            
 
         for _, group_data in group1:
@@ -95,12 +116,9 @@ class blastParser():
             for element in record:
                 result1.append(element[0:6])
 
-        for _, group_data in group2:
-            record = _bestHitChooser(group_data,self.main)
-            for element in record:
-                result2.append(element[0:6])
+        
 
-        return pd.DataFrame(result1,columns=self.colName1), pd.DataFrame(result2,columns=self.colName2)
+        return pd.DataFrame(result1,columns=self.colName1), reverse_data
 
     def handleBlastData(self, main_to_minor:pd.DataFrame, minor_to_main:pd.DataFrame):
         merge_table = pd.merge(main_to_minor,minor_to_main,on=self.minor,how="left")
